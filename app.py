@@ -18,10 +18,11 @@ app = Flask(__name__)
 # configure the SQLite database, relative to the app instance folder
 
 # for sqlite database
-# app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite3"
-
-# for mysql database
-app.config["SQLALCHEMY_DATABASE_URI"] = f"mysql+pymysql://{dotenv.get_key('.env', 'MYSQL_USERNAME')}:{dotenv.get_key('.env', 'MYSQL_PASSWORD')}@{dotenv.get_key('.env', 'MYSQL_HOST')}/{dotenv.get_key('.env', 'MYSQL_DATABASE')}"
+if dotenv.get_key('.env', 'FLASK_DEBUG') == 'True':
+    app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///db.sqlite3"
+else: 
+    # for mysql database
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"mysql+pymysql://{dotenv.get_key('.env', 'MYSQL_USERNAME')}:{dotenv.get_key('.env', 'MYSQL_PASSWORD')}@{dotenv.get_key('.env', 'MYSQL_HOST')}/{dotenv.get_key('.env', 'MYSQL_DATABASE')}"
 
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config["SECRET_KEY"] = dotenv.get_key('.env', 'SECRET_KEY')
@@ -67,6 +68,15 @@ def token_required(f):
     return decorated
 
 
+
+## utilities
+def validate_password(password):
+    if len(password) < 8:
+        return False
+    else:
+        return True
+
+
 ## routes
 @app.route('/')
 def index():
@@ -78,20 +88,41 @@ def index():
 def create_user():
     if request.method == 'POST':
         data = request.get_json()
-        username = data['username']
-        password = data['password']
-        hashed_password = generate_password_hash(password)
-        new_user = User(username=username, password=hashed_password)
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'message': 'User created'})
+        # get username and password from the request
+        username = data.get('username')
+        password = data.get('password')
+
+        # check if username and password are not empty
+        if username and password:
+            # check if username already exists
+            user = User.query.filter_by(username=username).first()
+            if user:
+                return jsonify({'message': 'Username already exists'})
+            # check if password is valid
+            if validate_password(password):
+                hashed_password = generate_password_hash(password)
+                new_user = User(username=username, password=hashed_password)
+                db.session.add(new_user)
+                db.session.commit()
+                return jsonify({'message': 'User created'})
+            else:
+                return jsonify({'message': 'Password is too short'})
+        else:
+            return jsonify({'message': 'Username or password is missing'})
     
 
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
-    username = data['username']
-    password = data['password']
+    # get username and password from the request
+    username = data.get('username')
+    password = data.get('password')
+
+    # check if username and password are not empty
+    if not username or not password:
+        return jsonify({'message': 'Username or password is missing'})
+    
+    # check if username and password are correct
     user = User.query.filter_by(username=username).first()
     if user:
         if check_password_hash(user.password, password):
@@ -107,18 +138,27 @@ def login():
 @token_required
 def change_password():
     data = request.get_json()
-    username = data['username']
-    password = data['password']
-    new_password = data['new_password']
+    # get username and password from the request
+    username = data.get('username')
+    password = data.get('password')
+    new_password = data.get('new_password')
+
+    # check if username and password are not empty
+    if not username or not password or not new_password:
+        return jsonify({'message': 'Username, password or new_password is missing'})
+    
+    # check if username and password are correct
     user = User.query.filter_by(username=username).first()
     if user:
         if check_password_hash(user.password, password):
+            if not validate_password(new_password):
+                return jsonify({'message': 'Password is too short'})
             hashed_password = generate_password_hash(new_password)
             user.password = hashed_password
             db.session.commit()
             return jsonify({'message': 'Password changed'})
         else:
-            return jsonify({'message': 'Wrong password'})
+            return jsonify({'message': 'Wrong usernamer or password'})
     else:
         return jsonify({'message': 'Wrong username or password'})
     
@@ -127,10 +167,28 @@ def change_password():
 @token_required
 def create_license():
     data = request.get_json()
-    username = data['username']
-    license_key = data['license_key']
-    days = data['days']
+    # get username, license key and days from the request
+    username = data.get('username')
+    license_key = data.get('license_key')
+    days = data.get('days')
+
+    # check if username, license key and days are not empty
+    if not username or not license_key or not days:
+        return jsonify({'message': 'Username, license key or days are missing'})
+    
+    try:
+        days = int(days)
+    except:
+        return jsonify({'message': 'Days must be an integer'})
+    
     expire_date = datetime.today() + timedelta(days=days)
+
+    # check if license key already exists
+    check_license = License.query.filter_by(license_key=license_key).first()
+    if check_license:
+        return jsonify({'message': 'License already exists'})
+    
+    # create new license
     new_license = License(username=username, license_key=license_key, expire_date=expire_date)
     db.session.add(new_license)
     db.session.commit()
@@ -141,7 +199,7 @@ def create_license():
 @token_required
 def delete_license():
     data = request.get_json()
-    license_key = data['license_key']
+    license_key = data.get('license_key')
     license = License.query.filter_by(license_key=license_key).first()
     if license:
         db.session.delete(license)
@@ -155,8 +213,20 @@ def delete_license():
 @token_required
 def update_license():
     data = request.get_json()
-    license_key = data['license_key']
-    days = data['days']
+    license_key = data.get('license_key')
+    days = data.get('days')
+
+    # check if license key and days are not empty
+    if not license_key or not days:
+        return jsonify({'message': 'License key or days are missing'})
+    
+    # check if days is an integer
+    try:
+        days = int(days)
+    except:
+        return jsonify({'message': 'Days must be an integer'})
+    
+    # check if license key exists
     license = License.query.filter_by(license_key=license_key).first()
     if license:
         license.expire_date = datetime.today() + timedelta(days=days)
@@ -186,7 +256,13 @@ def licenses():
 @app.route('/api/check-license', methods=['POST'])
 def check_license():
     data = request.get_json()
-    license_key = data['license_key']
+    license_key = data.get('license_key')
+
+    # check if license key is not empty
+    if not license_key:
+        return jsonify({'message': 'License key is missing', 'authenticated': False})
+    
+    
     license = License.query.filter_by(license_key=license_key).first()
     if request.headers.get('User-Agent') != 'Code Mail Lite/(v1.0)':
         return jsonify({'message': 'Access denied', 'authenticated': False})
