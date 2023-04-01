@@ -1,6 +1,7 @@
 # from flask
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 # third party packages
 import jwt
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -29,6 +30,7 @@ app.config["SECRET_KEY"] = dotenv.get_key('.env', 'SECRET_KEY')
 
 # initialize the app with the extension
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 
 ## models
@@ -36,6 +38,8 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(128),  nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -47,6 +51,8 @@ class License(db.Model):
     license_key = db.Column(db.String(128), unique=True, nullable=False)
     expire_date = db.Column(db.DateTime, nullable=False)
     expired = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def __repr__(self):
         return f'<Username {self.username}> <License {self.license_key}>'
