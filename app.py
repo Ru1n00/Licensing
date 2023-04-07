@@ -161,6 +161,7 @@ def change_password():
                 return jsonify({'message': 'Password is too short'})
             hashed_password = generate_password_hash(new_password)
             user.password = hashed_password
+            user.updated_at = datetime.utcnow()
             db.session.commit()
             return jsonify({'message': 'Password changed'})
         else:
@@ -236,6 +237,7 @@ def update_license():
     license = License.query.filter_by(license_key=license_key).first()
     if license:
         license.expire_date = datetime.today() + timedelta(days=days)
+        license.updated_at = datetime.utcnow()
         db.session.commit()
         return jsonify({'message': 'License updated'})
     else:
