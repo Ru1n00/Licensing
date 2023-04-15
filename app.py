@@ -89,6 +89,7 @@ def index():
     return '500 Internal Server Error'
 
 
+## user routes
 @app.route('/api/create-user', methods=['GET', 'POST'])
 @token_required
 def create_user():
@@ -170,6 +171,7 @@ def change_password():
         return jsonify({'message': 'Wrong username or password'})
     
 
+## license routes -- lite
 @app.route('/api/create-license', methods=['POST'])
 @token_required
 def create_license():
@@ -207,6 +209,11 @@ def create_license():
 def delete_license():
     data = request.get_json()
     license_key = data.get('license_key')
+
+    # check if username, license key and days are not empty
+    if not license_key:
+        return jsonify({'message': 'license_key is missing'})
+    
     license = License.query.filter_by(license_key=license_key).first()
     if license:
         db.session.delete(license)
